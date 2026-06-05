@@ -1,0 +1,97 @@
+# 📈 매매 일지 (Trade Diary)
+
+한국 주식 거래를 기록·분석하고, 매매마다 복기 메모를 남겨 꾸준히 쌓아가는 **개인용 단일 사용자 로컬 웹앱**입니다.
+모든 데이터는 서버 없이 브라우저의 `localStorage`에만 저장됩니다.
+
+## 기술 스택
+
+- Vite + React + TypeScript
+- Tailwind CSS
+- recharts (차트)
+- Vitest (단위 테스트)
+
+## 실행 방법
+
+```bash
+npm install      # 의존성 설치 (최초 1회)
+npm run dev      # 개발 서버 실행 → http://localhost:5173
+npm run build    # 프로덕션 빌드 (dist/)
+npm run preview  # 빌드 결과 미리보기
+npm test         # 단위 테스트 실행 (파서 · 라운드트립 매칭)
+```
+
+## 주요 기능
+
+### 1. 매매 기록
+- **수동 입력**: 날짜/시간, 종목명, 종목코드, 매매구분(매수/매도), 수량, 단가. 거래금액 자동 계산.
+- **카카오톡 체결안내 자동 파싱**: 한국투자증권 카카오톡 알림 텍스트를 통째로 붙여넣으면 체결 건만 골라 여러 건을 한 번에 인식합니다. 체결안내가 아닌 메시지는 무시합니다.
+
+### 2. 라운드트립 매칭
+같은 종목(·계좌)의 매수/매도를 **FIFO**로 짝지어 실현손익·수익률(%)을 자동 계산합니다. 미청산(보유) 수량은 대시보드에 별도 표시됩니다.
+
+### 3. 복기 일지
+라운드트립(매도 청산)마다 전략 태그(갭앤고/불플래그/ABCD/모멘텀 + 직접 추가), 진입 이유, 청산 이유, 감정/심리, 배운 점, 자기평가 별점(1~5)을 남길 수 있습니다.
+
+### 4. 대시보드
+총 실현손익, 승률, 손익비(평균수익÷평균손실), 프로핏 팩터, 누적 손익 곡선, 종목별·전략별 손익 그래프.
+
+### 5. 필터/검색
+기간·종목·매매구분·전략별 필터.
+
+### 6. 데이터 영속성 · 백업
+- `localStorage` 자동 저장 (새로고침해도 유지).
+- **JSON 전체 백업/복원**, **CSV 내보내기/가져오기**로 백업 및 기기 이전 지원.
+
+## 카카오톡 체결안내 형식
+
+아래와 같은 형식을 인식합니다 (여러 건을 한 번에 붙여넣어도 됩니다):
+
+```
+2025년 10월 24일 오전 10:41, 한국투자증권 : [한국투자증권 체결안내]10:41
+*계좌번호:64****22-29
+*계좌명:김신회
+*매매구분:현금매수체결
+*종목명:KODEX 200미국채혼합(284430)
+*체결수량:212주
+*체결단가:16,325원
+```
+
+파싱 규칙:
+- 매매구분에 "매수"→매수, "매도"→매도
+- 종목명 `이름(코드)` → 이름 + 6자리 코드 분리
+- 수량/단가는 숫자만 추출(콤마·"주"·"원" 제거)
+- "오전/오후 HH:MM" 12시간제 → 24시간제 변환
+- 계좌번호는 선택 필드로 저장(계좌별 매칭·필터용)
+- 동일 체결 중복 붙여넣기는 자동으로 1건만 저장
+
+파서는 `src/lib/kakaoParser.ts`에 분리되어 있으며, `src/lib/kakaoParser.test.ts`에 위 샘플을 포함한 단위 테스트가 있습니다.
+
+## 폴더 구조
+
+```
+src/
+  types.ts                # 데이터 모델
+  lib/
+    kakaoParser.ts        # 카카오톡 체결안내 파서 (+ .test.ts)
+    roundtrip.ts          # FIFO 라운드트립 매칭 (+ .test.ts)
+    stats.ts              # 대시보드 지표 계산
+    filters.ts            # 기간/종목/구분/전략 필터
+    storage.ts            # localStorage · CSV/JSON 입출력
+    format.ts             # 원화/퍼센트/색상 포맷
+  hooks/useStore.ts       # 상태 + 영속화 + 파생 데이터
+  components/             # Dashboard / TradeList / Journal / ImportPanel ...
+```
+
+## ⚠️ 개인정보 주의
+
+카카오톡 원본 대화 파일과 거래 데이터에는 **계좌번호·계좌명 등 개인정보**가 포함됩니다.
+`.gitignore`에 `data/`, `*.kakao.txt`, `exports/`, `*카카오톡 대화*` 가 등록되어 있어 깃에 올라가지 않습니다.
+원본 대화 파일은 저장소 바깥(예: `data/`)에 두거나 위 패턴에 맞춰 보관하세요.
+
+## 데이터 모델
+
+```ts
+trade: { id, datetime, stockName, stockCode, side, quantity, price, amount, account?, fee? }
+roundTrip: { id, stockCode, stockName, openDate, closeDate, quantity, avgBuyPrice, sellPrice, pnl, pnlPct, ... }
+journalEntry: { roundTripId, strategy[], entryReason, exitReason, emotion, lesson, rating }
+```
