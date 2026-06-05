@@ -4,14 +4,14 @@ import { FilterBar } from './FilterBar'
 import { PositionsPanel } from './PositionsPanel'
 import { emptyFilter, filterRoundTrips } from '../lib/filters'
 import {
+  assetTrend,
   computeStats,
-  equityCurve,
   pnlByStock,
   pnlByStrategy,
   portfolioValue,
   valuePositions,
 } from '../lib/stats'
-import { formatPct, formatSignedWon, formatWon, pnlColor } from '../lib/format'
+import { formatSignedWon, formatWon, pnlColor } from '../lib/format'
 
 // recharts는 무거우므로 별도 청크로 분리해 대시보드 탭을 열 때만 로드한다.
 const DashboardCharts = lazy(() => import('./DashboardCharts'))
@@ -46,6 +46,9 @@ const ChartFallback = () => (
 
 export function Dashboard({ store }: { store: Store }) {
   const [filter, setFilter] = useState(emptyFilter)
+  const [capitalDraft, setCapitalDraft] = useState(
+    store.settings.initialCapital != null ? String(store.settings.initialCapital) : '',
+  )
 
   const rts = useMemo(
     () => filterRoundTrips(store.roundTrips, store.journals, filter),
@@ -53,7 +56,6 @@ export function Dashboard({ store }: { store: Store }) {
   )
 
   const stats = useMemo(() => computeStats(rts), [rts])
-  const curve = useMemo(() => equityCurve(rts), [rts])
   const byStock = useMemo(() => pnlByStock(rts).slice(0, 12), [rts])
   const byStrategy = useMemo(() => pnlByStrategy(rts, store.journals), [rts, store.journals])
 
@@ -62,6 +64,23 @@ export function Dashboard({ store }: { store: Store }) {
     () => portfolioValue(valuePositions(store.openPositions, store.quotes)),
     [store.openPositions, store.quotes],
   )
+
+  // 총자산 / 손익 추이
+  const trend = useMemo(
+    () =>
+      assetTrend(
+        rts,
+        pv.unrealizedPnl,
+        store.openPositions.length > 0 && pv.valuedCount > 0,
+        store.settings.initialCapital,
+      ),
+    [rts, pv.unrealizedPnl, pv.valuedCount, store.openPositions.length, store.settings.initialCapital],
+  )
+
+  const commitCapital = () => {
+    const v = parseFloat(capitalDraft.replace(/[,\s원]/g, ''))
+    store.updateSettings({ initialCapital: isFinite(v) && v > 0 ? v : undefined })
+  }
 
   const fmtPayoff = (n: number) => (n === Infinity ? '∞' : n === 0 ? '-' : n.toFixed(2))
 
@@ -102,11 +121,6 @@ export function Dashboard({ store }: { store: Store }) {
         <StatCard label="손익비" value={fmtPayoff(stats.payoffRatio)} sub="평균수익 ÷ 평균손실" />
         <StatCard label="프로핏 팩터" value={fmtPayoff(stats.profitFactor)} sub="총이익 ÷ 총손실" />
         <StatCard
-          label="평균 수익률"
-          value={formatPct(stats.avgPnlPct)}
-          color={pnlColor(stats.avgPnlPct)}
-        />
-        <StatCard
           label="평가손익 (보유)"
           value={pv.valuedCount > 0 ? formatSignedWon(pv.unrealizedPnl) : '-'}
           sub={
@@ -116,11 +130,47 @@ export function Dashboard({ store }: { store: Store }) {
           }
           color={pv.valuedCount > 0 ? pnlColor(pv.unrealizedPnl) : undefined}
         />
+        <StatCard
+          label="총 손익 (실현+평가)"
+          value={formatSignedWon(stats.totalPnl + (pv.valuedCount > 0 ? pv.unrealizedPnl : 0))}
+          sub={
+            store.settings.initialCapital != null
+              ? `총자산 ${formatWon(
+                  store.settings.initialCapital + stats.totalPnl + pv.unrealizedPnl,
+                )}`
+              : '초기원금 입력 시 총자산 표시'
+          }
+          color={pnlColor(stats.totalPnl + (pv.valuedCount > 0 ? pv.unrealizedPnl : 0))}
+        />
+      </div>
+
+      {/* 초기 투자원금 설정 */}
+      <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+        <label className="text-xs font-medium text-gray-600">초기 투자원금(예수금)</label>
+        <input
+          className="input w-40 py-1.5 text-right tabular-nums"
+          inputMode="numeric"
+          placeholder="예: 10,000,000"
+          value={capitalDraft}
+          onChange={(e) => setCapitalDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          onBlur={commitCapital}
+        />
+        <span className="text-[11px] text-gray-400">
+          입력하면 추이 그래프가 <b>총자산(절대값)</b> 기준으로 표시됩니다. 비워두면 누적 손익 기준.
+        </span>
       </div>
 
       {/* 차트 (lazy) */}
       <Suspense fallback={<ChartFallback />}>
-        <DashboardCharts curve={curve} byStock={byStock} byStrategy={byStrategy} />
+        <DashboardCharts
+          assetTrend={trend}
+          initialCapital={store.settings.initialCapital}
+          byStock={byStock}
+          byStrategy={byStrategy}
+        />
       </Suspense>
 
       {/* 보유 종목 평가손익 */}

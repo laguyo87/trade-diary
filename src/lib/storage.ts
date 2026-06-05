@@ -6,8 +6,17 @@ const VERSION = 1
 
 export const DEFAULT_STRATEGIES = ['갭앤고', '불플래그', 'ABCD', '모멘텀']
 
+const DEFAULT_SETTINGS = { autoRefresh: false, refreshIntervalSec: 30 }
+
 export function emptySnapshot(): StoreSnapshot {
-  return { version: VERSION, trades: [], journals: {}, customStrategies: [], quotes: {} }
+  return {
+    version: VERSION,
+    trades: [],
+    journals: {},
+    customStrategies: [],
+    quotes: {},
+    settings: { ...DEFAULT_SETTINGS },
+  }
 }
 
 export function loadSnapshot(): StoreSnapshot {
@@ -21,6 +30,7 @@ export function loadSnapshot(): StoreSnapshot {
       journals: parsed.journals ?? {},
       customStrategies: parsed.customStrategies ?? [],
       quotes: parsed.quotes ?? {},
+      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
     }
   } catch {
     return emptySnapshot()
@@ -72,6 +82,7 @@ export function importJson(text: string): StoreSnapshot {
     journals: parsed.journals ?? {},
     customStrategies: parsed.customStrategies ?? [],
     quotes: parsed.quotes ?? {},
+    settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
   }
 }
 

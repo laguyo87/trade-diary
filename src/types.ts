@@ -71,6 +71,13 @@ export interface JournalEntry {
   updatedAt: string
 }
 
+// 사용자 설정
+export interface Settings {
+  initialCapital?: number // 초기 투자원금(예수금) — 총자산 추이 절대값 계산용
+  autoRefresh?: boolean // 장중 현재가 자동 갱신
+  refreshIntervalSec?: number // 자동 갱신 주기(초)
+}
+
 // localStorage 저장 스냅샷
 export interface StoreSnapshot {
   version: number
@@ -78,4 +85,5 @@ export interface StoreSnapshot {
   journals: Record<string, JournalEntry>
   customStrategies: string[]
   quotes: Record<string, Quote> // 종목코드 → 현재가
+  settings: Settings
 }

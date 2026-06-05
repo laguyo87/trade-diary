@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Store } from '../hooks/useStore'
 import type { Quote } from '../types'
 import { portfolioValue, valuePositions } from '../lib/stats'
 import { fetchQuotes } from '../lib/quotes'
+import { isKoreanMarketOpen, marketSessionLabel } from '../lib/market'
 import {
   formatNumber,
   formatPct,
@@ -22,6 +23,7 @@ export function PositionsPanel({ store }: { store: Store }) {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ code: string; message: string }[]>([])
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [session, setSession] = useState(() => marketSessionLabel())
 
   const valued = useMemo(
     () => valuePositions(store.openPositions, store.quotes),
@@ -29,7 +31,24 @@ export function PositionsPanel({ store }: { store: Store }) {
   )
   const pv = useMemo(() => portfolioValue(valued), [valued])
 
+  // 최신 갱신 시각 (보유 종목 quote 중 가장 최근)
+  const lastUpdated = useMemo(() => {
+    const times = store.openPositions
+      .map((p) => store.quotes[p.stockCode]?.updatedAt)
+      .filter(Boolean) as string[]
+    if (!times.length) return undefined
+    times.sort()
+    return times[times.length - 1]
+  }, [store.openPositions, store.quotes])
+
+  const { autoRefresh, refreshIntervalSec = 30 } = store.settings
+
+  // 동시 요청 방지용 ref (state 클로저 문제 회피)
+  const fetchingRef = useRef(false)
+
   const refreshAll = async () => {
+    if (fetchingRef.current) return
+    fetchingRef.current = true
     setLoading(true)
     setErrors([])
     const codes = store.openPositions.map((p) => p.stockCode)
@@ -37,7 +56,27 @@ export function PositionsPanel({ store }: { store: Store }) {
     store.setQuotes(quotes)
     setErrors(errors)
     setLoading(false)
+    fetchingRef.current = false
   }
+
+  // 장중 자동 갱신: 켜져 있고 보유 종목이 있으며 정규장일 때만 주기적으로 조회.
+  useEffect(() => {
+    if (!autoRefresh || store.openPositions.length === 0) return
+    if (isKoreanMarketOpen()) void refreshAll() // 켜는 즉시 1회
+    const id = window.setInterval(() => {
+      setSession(marketSessionLabel())
+      if (isKoreanMarketOpen()) void refreshAll()
+    }, Math.max(5, refreshIntervalSec) * 1000)
+    return () => window.clearInterval(id)
+    // refreshAll은 매 렌더 새로 생성되므로 의존성에서 제외 (의도적)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh, refreshIntervalSec, store.openPositions.length])
+
+  // 세션 라벨 1분마다 갱신 (자동갱신 꺼져 있어도 배지 최신화)
+  useEffect(() => {
+    const id = window.setInterval(() => setSession(marketSessionLabel()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   const refreshOne = async (code: string) => {
     setLoading(true)
@@ -72,11 +111,54 @@ export function PositionsPanel({ store }: { store: Store }) {
   return (
     <div className="card p-0">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
-        <h3 className="text-sm font-semibold text-gray-800">미청산(보유) 포지션 · 평가손익</h3>
-        <button className="btn-ghost" onClick={refreshAll} disabled={loading}>
-          {loading ? '불러오는 중…' : '전체 현재가 불러오기'}
-        </button>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-800">미청산(보유) 포지션 · 평가손익</h3>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              session === '장중'
+                ? 'bg-green-50 text-green-600'
+                : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            ● {session}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={!!autoRefresh}
+              onChange={(e) => store.updateSettings({ autoRefresh: e.target.checked })}
+            />
+            장중 자동 갱신
+          </label>
+          <select
+            className="input w-auto py-1 text-xs disabled:opacity-50"
+            value={refreshIntervalSec}
+            disabled={!autoRefresh}
+            onChange={(e) =>
+              store.updateSettings({ refreshIntervalSec: parseInt(e.target.value, 10) })
+            }
+          >
+            <option value={10}>10초</option>
+            <option value={30}>30초</option>
+            <option value={60}>1분</option>
+            <option value={300}>5분</option>
+          </select>
+          <button className="btn-ghost" onClick={refreshAll} disabled={loading}>
+            {loading ? '불러오는 중…' : '전체 현재가 불러오기'}
+          </button>
+        </div>
       </div>
+      {(lastUpdated || autoRefresh) && (
+        <div className="px-4 pt-1 text-[11px] text-gray-400">
+          {lastUpdated && `최근 갱신 ${timeAgo(lastUpdated)}`}
+          {autoRefresh &&
+            (session === '장중'
+              ? ` · ${refreshIntervalSec}초마다 자동 갱신 중`
+              : ' · 장 시작 시 자동 갱신 재개')}
+        </div>
+      )}
 
       {/* 포트폴리오 요약 */}
       <div className="mt-3 grid grid-cols-2 gap-px bg-gray-100 text-center md:grid-cols-4">
