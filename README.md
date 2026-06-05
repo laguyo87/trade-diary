@@ -69,11 +69,12 @@ Windows에서 추출하려면 **심볼릭 링크 생성 권한**이 필요합니
 
 폰 크롬에서 위 주소 접속 → 메뉴 **⋮ → 앱 설치 / 홈 화면에 추가** → 캔들 아이콘으로 설치됩니다.
 
-코드를 고친 뒤 다시 배포하려면:
+**자동 배포**: `main` 브랜치에 푸시하면 GitHub Actions(`.github/workflows/deploy.yml`)가
+빌드 후 Pages로 자동 게시합니다(1~2분). 따로 배포 명령이 필요 없습니다.
 ```bash
-npm run deploy     # 빌드 후 gh-pages 브랜치로 게시 (1~2분 뒤 위 주소에 반영)
+git add -A && git commit -m "..." && git push   # → 자동 빌드·배포
 ```
-- GitHub Pages 소스 = `gh-pages` 브랜치(루트). 소스 코드는 `main` 브랜치.
+- GitHub Pages 소스 = **GitHub Actions**. 소스 코드는 `main` 브랜치.
 - 저장소: https://github.com/laguyo87/trade-diary (Public, 소스만 — 거래 데이터·카톡 원본은 `.gitignore` 제외)
 - `base: './'` 라 서브경로(`/trade-diary/`)에서도 그대로 동작합니다.
 
