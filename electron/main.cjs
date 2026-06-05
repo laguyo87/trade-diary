@@ -11,6 +11,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     title: '매매 일지',
+    icon: path.join(__dirname, 'icon.png'),
     backgroundColor: '#f3f4f6',
     autoHideMenuBar: true, // 기본 메뉴바 숨김 (Alt로 토글)
     webPreferences: {

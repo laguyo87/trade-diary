@@ -41,10 +41,34 @@ await writeFile(
   ),
 )
 
-console.log('4/4  실행 파일 이름 변경…')
+console.log('4/4  실행 파일 이름 변경 + 아이콘/정보 적용…')
 const exe = path.join(out, 'electron.exe')
 const target = path.join(out, 'TradeDiary.exe')
 if (existsSync(exe)) await rename(exe, target)
+
+// exe에 아이콘과 버전 정보 입히기 (rcedit, 관리자 권한 불필요)
+const ico = path.join(root, 'build', 'icon.ico')
+if (existsSync(ico)) {
+  try {
+    const { rcedit } = await import('rcedit')
+    await rcedit(target, {
+      icon: ico,
+      'version-string': {
+        ProductName: '매매일지',
+        FileDescription: '매매 일지 — 한국 주식 매매 기록·분석',
+        CompanyName: 'Trade Diary',
+        LegalCopyright: '',
+      },
+      'file-version': pkg.version,
+      'product-version': pkg.version,
+    })
+    console.log('     아이콘 적용 완료')
+  } catch (e) {
+    console.warn('     아이콘 적용 실패(무시 가능):', e.message)
+  }
+} else {
+  console.warn('     build/icon.ico 없음 — `npm run icon` 후 다시 시도하세요.')
+}
 
 console.log('\n✅ 완료!  실행:  ' + target)
 console.log('   폴더 전체(release\\TradeDiary-win)를 복사해 어디서든 더블클릭으로 실행할 수 있습니다.')
