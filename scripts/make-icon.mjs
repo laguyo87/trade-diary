@@ -106,21 +106,6 @@ const grid = hex('#9fb3c8') // 옅은 그리드
 const red = hex('#ff4d4f') // 양봉(상승) — 한국 증시 빨강
 const blue = hex('#3b9dff') // 음봉(하락) — 파랑
 
-// 배경: 대각선 그라데이션 라운드 사각형
-fillRoundRect(0, 0, N, N, N * 0.235, (px, py) => {
-  const t = (px / N) * 0.4 + (py / N) * 0.6
-  return [
-    cTop[0] + (cBot[0] - cTop[0]) * t,
-    cTop[1] + (cBot[1] - cTop[1]) * t,
-    cTop[2] + (cBot[2] - cTop[2]) * t,
-  ]
-})
-
-// 옅은 가로 그리드 (차트 느낌)
-for (const gy of [0.34, 0.52, 0.7]) {
-  drawSeg(0.13 * N, gy * N, 0.87 * N, gy * N, 0.006 * N, grid, 0.16)
-}
-
 // 캔들스틱 — [centerX, openY, closeY, highY, lowY] (0..1, y는 아래로 증가)
 // 전체적으로 상승하는 흐름(양봉 우세)
 const candles = [
@@ -132,18 +117,35 @@ const candles = [
 ]
 const bodyW = 0.11 * N
 const wickW = 0.026 * N
-for (const [cxN, oN, clN, hN, lN] of candles) {
-  const cx = cxN * N
-  const o = oN * N
-  const cl = clN * N
-  const up = cl < o // 종가가 위(작은 y)면 양봉
-  const col = up ? red : blue
-  // 심지(고가~저가)
-  drawSeg(cx, hN * N, cx, lN * N, wickW / 2, col)
-  // 몸통(시가~종가)
-  const top = Math.min(o, cl)
-  const bot = Math.max(o, cl)
-  fillRoundRect(cx - bodyW / 2, top, bodyW, Math.max(bot - top, bodyW * 0.34), bodyW * 0.16, () => col)
+
+// maskable=true 면 모서리 둥글림 없이 꽉 찬 배경(안전영역 마스킹 대비)
+function draw(maskable) {
+  buf.fill(0)
+  const bgRadius = maskable ? 0 : N * 0.235
+  fillRoundRect(0, 0, N, N, bgRadius, (px, py) => {
+    const t = (px / N) * 0.4 + (py / N) * 0.6
+    return [
+      cTop[0] + (cBot[0] - cTop[0]) * t,
+      cTop[1] + (cBot[1] - cTop[1]) * t,
+      cTop[2] + (cBot[2] - cTop[2]) * t,
+    ]
+  })
+
+  for (const gy of [0.34, 0.52, 0.7]) {
+    drawSeg(0.13 * N, gy * N, 0.87 * N, gy * N, 0.006 * N, grid, 0.16)
+  }
+
+  for (const [cxN, oN, clN, hN, lN] of candles) {
+    const cx = cxN * N
+    const o = oN * N
+    const cl = clN * N
+    const up = cl < o // 종가가 위(작은 y)면 양봉
+    const col = up ? red : blue
+    drawSeg(cx, hN * N, cx, lN * N, wickW / 2, col) // 심지
+    const top = Math.min(o, cl)
+    const bot = Math.max(o, cl)
+    fillRoundRect(cx - bodyW / 2, top, bodyW, Math.max(bot - top, bodyW * 0.34), bodyW * 0.16, () => col)
+  }
 }
 
 // ---- 면적 리샘플(프리멀티플라이드 → 스트레이트) ----
@@ -246,21 +248,36 @@ function encodeIco(sizes) {
 const root = process.cwd()
 mkdirSync(path.join(root, 'build'), { recursive: true })
 mkdirSync(path.join(root, 'public'), { recursive: true })
+mkdirSync(path.join(root, 'public', 'icons'), { recursive: true })
 
+// 일반(라운드) 렌더 — 데스크톱/파비콘/홈화면 일반 아이콘
+draw(false)
 const ico = encodeIco([256, 128, 64, 48, 32, 24, 16])
 const png256 = encodePng(resampleToRGBA8(256), 256)
+const png192 = encodePng(resampleToRGBA8(192), 192)
+const png512 = encodePng(resampleToRGBA8(512), 512)
 
 const icoPath = path.join(root, 'build', 'icon.ico')
-const pngPath = path.join(root, 'build', 'icon.png')
 writeFileSync(icoPath, ico)
-writeFileSync(pngPath, png256)
+writeFileSync(path.join(root, 'build', 'icon.png'), png256)
 
-// 창 아이콘(Electron) + 웹 favicon에 배포
+// 창 아이콘(Electron) + 웹 favicon
 writeFileSync(path.join(root, 'electron', 'icon.png'), png256)
 writeFileSync(path.join(root, 'electron', 'icon.ico'), ico)
 copyFileSync(icoPath, path.join(root, 'public', 'favicon.ico'))
 
+// PWA 아이콘 (홈화면 설치용)
+writeFileSync(path.join(root, 'public', 'icons', 'icon-192.png'), png192)
+writeFileSync(path.join(root, 'public', 'icons', 'icon-512.png'), png512)
+writeFileSync(path.join(root, 'public', 'apple-touch-icon.png'), png192)
+
+// maskable(꽉 찬 배경) 렌더 — 안드로이드 적응형 아이콘
+draw(true)
+const maskable512 = encodePng(resampleToRGBA8(512), 512)
+writeFileSync(path.join(root, 'public', 'icons', 'maskable-512.png'), maskable512)
+
 console.log('✅ 아이콘 생성 완료:')
 console.log('   build/icon.ico, build/icon.png')
 console.log('   electron/icon.png, electron/icon.ico')
-console.log('   public/favicon.ico')
+console.log('   public/favicon.ico, public/apple-touch-icon.png')
+console.log('   public/icons/icon-192.png, icon-512.png, maskable-512.png')
