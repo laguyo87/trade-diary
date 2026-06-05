@@ -24,6 +24,35 @@ const LOSS = '#1971c2'
 
 const won = (v: number | string) => formatSignedWon(Number(v))
 
+// '현재(평가 포함)' 점에만 그려지는 실시간 펄스 마커 + 값 라벨.
+// recharts가 cx/cy/value/payload를 주입한다(absolute는 clone 시 보존).
+interface DotProps {
+  cx?: number
+  cy?: number
+  value?: number
+  payload?: AssetPoint
+  absolute?: boolean
+}
+function CurrentDot({ cx, cy, value, payload, absolute }: DotProps) {
+  if (cx == null || cy == null || value == null || !payload?.projected) return null
+  const label = absolute ? formatWon(value) : formatSignedWon(value)
+  return (
+    <g>
+      {/* 숨쉬는 펄스 링 */}
+      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#f59e0b" strokeWidth={2} opacity={0.7}>
+        <animate attributeName="r" values="5;16" dur="1.6s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.7;0" dur="1.6s" repeatCount="indefinite" />
+      </circle>
+      {/* 중심 점 */}
+      <circle cx={cx} cy={cy} r={4} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} />
+      {/* 실시간 값 라벨 */}
+      <text x={cx - 10} y={cy - 12} textAnchor="end" fontSize={11} fontWeight={700} fill="#b45309">
+        {label}
+      </text>
+    </g>
+  )
+}
+
 interface Props {
   assetTrend: AssetPoint[]
   initialCapital?: number
@@ -64,7 +93,7 @@ export default function DashboardCharts({
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={assetTrend} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+            <ComposedChart data={assetTrend} margin={{ top: 14, right: 28, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id="assetFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#111827" stopOpacity={0.12} />
@@ -105,6 +134,7 @@ export default function DashboardCharts({
                 fill="url(#assetFill)"
                 connectNulls
                 dot={false}
+                isAnimationActive={false}
               />
               <Line
                 type="monotone"
@@ -114,7 +144,11 @@ export default function DashboardCharts({
                 strokeWidth={2}
                 strokeDasharray="5 4"
                 connectNulls
-                dot={{ r: 3, fill: '#f59e0b' }}
+                dot={<CurrentDot absolute={absolute} />}
+                activeDot={false}
+                isAnimationActive
+                animationDuration={600}
+                animationEasing="ease-out"
               />
             </ComposedChart>
           </ResponsiveContainer>
