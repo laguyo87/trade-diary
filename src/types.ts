@@ -48,6 +48,17 @@ export interface OpenPosition {
   cost: number // 보유 원금
 }
 
+// 현재가(시세) — 보유 종목 평가손익 계산용
+export interface Quote {
+  code: string
+  price: number
+  name?: string
+  changeRate?: number // 등락률 %
+  marketStatus?: string // OPEN / CLOSE 등
+  updatedAt: string // ISO
+  manual?: boolean // 수동 입력 여부
+}
+
 // 복기 메모 (라운드트립 단위)
 export interface JournalEntry {
   roundTripId: string
@@ -66,4 +77,5 @@ export interface StoreSnapshot {
   trades: Trade[]
   journals: Record<string, JournalEntry>
   customStrategies: string[]
+  quotes: Record<string, Quote> // 종목코드 → 현재가
 }

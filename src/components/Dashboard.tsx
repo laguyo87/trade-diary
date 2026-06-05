@@ -1,36 +1,20 @@
-import { useMemo, useState } from 'react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import type { Store } from '../hooks/useStore'
 import { FilterBar } from './FilterBar'
+import { PositionsPanel } from './PositionsPanel'
 import { emptyFilter, filterRoundTrips } from '../lib/filters'
 import {
   computeStats,
   equityCurve,
   pnlByStock,
   pnlByStrategy,
+  portfolioValue,
+  valuePositions,
 } from '../lib/stats'
-import {
-  formatNumber,
-  formatPct,
-  formatSignedWon,
-  formatWon,
-  pnlColor,
-} from '../lib/format'
+import { formatPct, formatSignedWon, formatWon, pnlColor } from '../lib/format'
 
-const PROFIT = '#e03131'
-const LOSS = '#1971c2'
+// recharts는 무거우므로 별도 청크로 분리해 대시보드 탭을 열 때만 로드한다.
+const DashboardCharts = lazy(() => import('./DashboardCharts'))
 
 function StatCard({
   label,
@@ -54,9 +38,11 @@ function StatCard({
   )
 }
 
-function wonTooltip(v: number | string) {
-  return formatSignedWon(Number(v))
-}
+const ChartFallback = () => (
+  <div className="card flex h-64 items-center justify-center text-sm text-gray-400">
+    차트 불러오는 중…
+  </div>
+)
 
 export function Dashboard({ store }: { store: Store }) {
   const [filter, setFilter] = useState(emptyFilter)
@@ -69,15 +55,15 @@ export function Dashboard({ store }: { store: Store }) {
   const stats = useMemo(() => computeStats(rts), [rts])
   const curve = useMemo(() => equityCurve(rts), [rts])
   const byStock = useMemo(() => pnlByStock(rts).slice(0, 12), [rts])
-  const byStrategy = useMemo(
-    () => pnlByStrategy(rts, store.journals),
-    [rts, store.journals],
+  const byStrategy = useMemo(() => pnlByStrategy(rts, store.journals), [rts, store.journals])
+
+  // 보유 평가손익 (날짜 필터와 무관 — 현재 보유 기준)
+  const pv = useMemo(
+    () => portfolioValue(valuePositions(store.openPositions, store.quotes)),
+    [store.openPositions, store.quotes],
   )
 
-  const openCost = store.openPositions.reduce((s, p) => s + p.cost, 0)
-
-  const fmtPayoff = (n: number) =>
-    n === Infinity ? '∞' : n === 0 ? '-' : n.toFixed(2)
+  const fmtPayoff = (n: number) => (n === Infinity ? '∞' : n === 0 ? '-' : n.toFixed(2))
 
   if (store.trades.length === 0) {
     return (
@@ -113,167 +99,32 @@ export function Dashboard({ store }: { store: Store }) {
           value={`${stats.winRate.toFixed(1)}%`}
           sub={`${stats.winCount}승 ${stats.lossCount}패`}
         />
-        <StatCard
-          label="손익비"
-          value={fmtPayoff(stats.payoffRatio)}
-          sub="평균수익 ÷ 평균손실"
-        />
-        <StatCard
-          label="프로핏 팩터"
-          value={fmtPayoff(stats.profitFactor)}
-          sub="총이익 ÷ 총손실"
-        />
+        <StatCard label="손익비" value={fmtPayoff(stats.payoffRatio)} sub="평균수익 ÷ 평균손실" />
+        <StatCard label="프로핏 팩터" value={fmtPayoff(stats.profitFactor)} sub="총이익 ÷ 총손실" />
         <StatCard
           label="평균 수익률"
           value={formatPct(stats.avgPnlPct)}
           color={pnlColor(stats.avgPnlPct)}
         />
         <StatCard
-          label="보유 평가원금"
-          value={formatWon(openCost)}
-          sub={`미청산 ${store.openPositions.length}종목`}
+          label="평가손익 (보유)"
+          value={pv.valuedCount > 0 ? formatSignedWon(pv.unrealizedPnl) : '-'}
+          sub={
+            store.openPositions.length > 0
+              ? `보유 ${store.openPositions.length}종목 · 원금 ${formatWon(pv.cost)}`
+              : '보유 종목 없음'
+          }
+          color={pv.valuedCount > 0 ? pnlColor(pv.unrealizedPnl) : undefined}
         />
       </div>
 
-      {/* 누적 손익 곡선 */}
-      <div className="card">
-        <h3 className="mb-3 text-sm font-semibold text-gray-800">누적 손익 곡선</h3>
-        {curve.length === 0 ? (
-          <div className="py-12 text-center text-sm text-gray-400">청산된 거래가 없습니다.</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={curve} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={24} />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                width={64}
-                tickFormatter={(v) => formatNumber(Number(v))}
-              />
-              <Tooltip
-                formatter={(v: number) => [wonTooltip(v), '누적손익']}
-                labelFormatter={(l) => `청산일 ${l}`}
-              />
-              <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Line
-                type="monotone"
-                dataKey="cumulative"
-                stroke="#111827"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+      {/* 차트 (lazy) */}
+      <Suspense fallback={<ChartFallback />}>
+        <DashboardCharts curve={curve} byStock={byStock} byStrategy={byStrategy} />
+      </Suspense>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* 종목별 손익 */}
-        <div className="card">
-          <h3 className="mb-3 text-sm font-semibold text-gray-800">종목별 손익</h3>
-          {byStock.length === 0 ? (
-            <div className="py-12 text-center text-sm text-gray-400">데이터 없음</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(180, byStock.length * 30)}>
-              <BarChart
-                data={byStock}
-                layout="vertical"
-                margin={{ top: 0, right: 16, bottom: 0, left: 8 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => formatNumber(Number(v))}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={96}
-                  tick={{ fontSize: 11 }}
-                />
-                <Tooltip formatter={(v: number) => [wonTooltip(v), '손익']} />
-                <ReferenceLine x={0} stroke="#cbd5e1" />
-                <Bar dataKey="pnl" radius={[0, 3, 3, 0]}>
-                  {byStock.map((d) => (
-                    <Cell key={d.name} fill={d.pnl >= 0 ? PROFIT : LOSS} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* 전략별 손익 */}
-        <div className="card">
-          <h3 className="mb-3 text-sm font-semibold text-gray-800">전략별 손익</h3>
-          {byStrategy.length === 0 ? (
-            <div className="py-12 text-center text-sm text-gray-400">
-              복기 일지에 전략 태그를 남기면 집계됩니다.
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(180, byStrategy.length * 36)}>
-              <BarChart
-                data={byStrategy}
-                layout="vertical"
-                margin={{ top: 0, right: 16, bottom: 0, left: 8 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => formatNumber(Number(v))}
-                />
-                <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  formatter={(v: number, _n, p) => [
-                    wonTooltip(v),
-                    `손익 (${p.payload.count}건)`,
-                  ]}
-                />
-                <ReferenceLine x={0} stroke="#cbd5e1" />
-                <Bar dataKey="pnl" radius={[0, 3, 3, 0]}>
-                  {byStrategy.map((d) => (
-                    <Cell key={d.name} fill={d.pnl >= 0 ? PROFIT : LOSS} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* 미청산 포지션 */}
-      {store.openPositions.length > 0 && (
-        <div className="card overflow-x-auto p-0">
-          <h3 className="px-4 pt-4 text-sm font-semibold text-gray-800">미청산(보유) 포지션</h3>
-          <table className="mt-2 w-full min-w-[520px] text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-xs text-gray-500">
-                <th className="px-4 py-2 font-medium">종목</th>
-                <th className="px-4 py-2 text-right font-medium">보유수량</th>
-                <th className="px-4 py-2 text-right font-medium">평균매수가</th>
-                <th className="px-4 py-2 text-right font-medium">평가원금</th>
-                <th className="px-4 py-2 font-medium">계좌</th>
-              </tr>
-            </thead>
-            <tbody>
-              {store.openPositions.map((p) => (
-                <tr key={p.key} className="border-b border-gray-50">
-                  <td className="px-4 py-2">
-                    {p.stockName}{' '}
-                    <span className="text-xs text-gray-400">{p.stockCode}</span>
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">{formatNumber(p.quantity)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{formatWon(p.avgBuyPrice)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{formatWon(p.cost)}</td>
-                  <td className="px-4 py-2 text-xs text-gray-400">{p.account ?? '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* 보유 종목 평가손익 */}
+      <PositionsPanel store={store} />
     </div>
   )
 }

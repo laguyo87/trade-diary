@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { JournalEntry, StoreSnapshot, Trade } from '../types'
+import type { JournalEntry, Quote, StoreSnapshot, Trade } from '../types'
 import {
   DEFAULT_STRATEGIES,
   loadSnapshot,
@@ -16,7 +16,7 @@ export function useStore() {
     saveSnapshot(snapshot)
   }, [snapshot])
 
-  const { trades, journals, customStrategies } = snapshot
+  const { trades, journals, customStrategies, quotes } = snapshot
 
   const addTrade = useCallback((t: Trade) => {
     setSnapshot((s) => {
@@ -56,7 +56,21 @@ export function useStore() {
   }, [])
 
   const clearAll = useCallback(() => {
-    setSnapshot({ version: 1, trades: [], journals: {}, customStrategies: [] })
+    setSnapshot({ version: 1, trades: [], journals: {}, customStrategies: [], quotes: {} })
+  }, [])
+
+  /** 현재가 설정/갱신 (자동 조회 결과 또는 수동 입력) */
+  const setQuote = useCallback((q: Quote) => {
+    setSnapshot((s) => ({ ...s, quotes: { ...s.quotes, [q.code]: q } }))
+  }, [])
+
+  const setQuotes = useCallback((qs: Quote[]) => {
+    if (qs.length === 0) return
+    setSnapshot((s) => {
+      const next = { ...s.quotes }
+      for (const q of qs) next[q.code] = q
+      return { ...s, quotes: next }
+    })
   }, [])
 
   const saveJournal = useCallback((entry: JournalEntry) => {
@@ -93,6 +107,7 @@ export function useStore() {
     trades,
     journals,
     customStrategies,
+    quotes,
     allStrategies,
     roundTrips,
     openPositions,
@@ -103,6 +118,8 @@ export function useStore() {
     clearAll,
     saveJournal,
     addStrategy,
+    setQuote,
+    setQuotes,
     replaceSnapshot,
   }
 }

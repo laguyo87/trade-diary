@@ -1,4 +1,4 @@
-import type { JournalEntry, RoundTrip } from '../types'
+import type { JournalEntry, OpenPosition, Quote, RoundTrip } from '../types'
 
 // 대시보드 지표 계산. 입력은 실현된 라운드트립 목록.
 
@@ -78,6 +78,65 @@ export function pnlByStock(rts: RoundTrip[]): GroupPnl[] {
     m.set(r.stockCode, cur)
   }
   return [...m.values()].sort((a, b) => b.pnl - a.pnl)
+}
+
+// ----- 보유 종목 평가손익 -----
+
+export interface ValuedPosition extends OpenPosition {
+  currentPrice?: number // 현재가 (없으면 미조회)
+  changeRate?: number
+  marketValue?: number // 평가금액 = 현재가 * 수량
+  unrealizedPnl?: number // 평가손익 = 평가금액 - 평가원금
+  unrealizedPct?: number // 평가수익률 %
+  quotedAt?: string
+  manualQuote?: boolean
+}
+
+export function valuePositions(
+  positions: OpenPosition[],
+  quotes: Record<string, Quote>,
+): ValuedPosition[] {
+  return positions.map((p) => {
+    const q = quotes[p.stockCode]
+    if (!q) return { ...p }
+    const marketValue = q.price * p.quantity
+    const unrealizedPnl = marketValue - p.cost
+    return {
+      ...p,
+      currentPrice: q.price,
+      changeRate: q.changeRate,
+      marketValue,
+      unrealizedPnl,
+      unrealizedPct: p.cost > 0 ? (unrealizedPnl / p.cost) * 100 : 0,
+      quotedAt: q.updatedAt,
+      manualQuote: q.manual,
+    }
+  })
+}
+
+export interface PortfolioValue {
+  cost: number // 평가원금 합
+  marketValue: number // 평가금액 합 (현재가 있는 종목만)
+  unrealizedPnl: number // 평가손익 합
+  unrealizedPct: number
+  valuedCount: number // 현재가 반영된 종목 수
+  totalCount: number
+}
+
+export function portfolioValue(valued: ValuedPosition[]): PortfolioValue {
+  const withPrice = valued.filter((p) => p.marketValue != null)
+  const cost = valued.reduce((s, p) => s + p.cost, 0)
+  const valuedCost = withPrice.reduce((s, p) => s + p.cost, 0)
+  const marketValue = withPrice.reduce((s, p) => s + (p.marketValue ?? 0), 0)
+  const unrealizedPnl = marketValue - valuedCost
+  return {
+    cost,
+    marketValue,
+    unrealizedPnl,
+    unrealizedPct: valuedCost > 0 ? (unrealizedPnl / valuedCost) * 100 : 0,
+    valuedCount: withPrice.length,
+    totalCount: valued.length,
+  }
 }
 
 /** 전략별 손익 (복기 메모의 strategy 태그 기준, 한 RT가 여러 태그면 각 태그에 가산) */

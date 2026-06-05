@@ -7,7 +7,7 @@ const VERSION = 1
 export const DEFAULT_STRATEGIES = ['갭앤고', '불플래그', 'ABCD', '모멘텀']
 
 export function emptySnapshot(): StoreSnapshot {
-  return { version: VERSION, trades: [], journals: {}, customStrategies: [] }
+  return { version: VERSION, trades: [], journals: {}, customStrategies: [], quotes: {} }
 }
 
 export function loadSnapshot(): StoreSnapshot {
@@ -20,6 +20,7 @@ export function loadSnapshot(): StoreSnapshot {
       trades: parsed.trades ?? [],
       journals: parsed.journals ?? {},
       customStrategies: parsed.customStrategies ?? [],
+      quotes: parsed.quotes ?? {},
     }
   } catch {
     return emptySnapshot()
@@ -70,6 +71,7 @@ export function importJson(text: string): StoreSnapshot {
     trades: parsed.trades ?? [],
     journals: parsed.journals ?? {},
     customStrategies: parsed.customStrategies ?? [],
+    quotes: parsed.quotes ?? {},
   }
 }
 
