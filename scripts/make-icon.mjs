@@ -100,14 +100,15 @@ function fillTriangle(p, q, s, col, alpha = 1) {
 }
 
 // ---- 렌더 ----
-const cTop = hex('#3b82f6') // blue-500
-const cBot = hex('#172554') // blue-950
-const white = hex('#f8fafc')
-const red = hex('#e03131') // 한국 증시 상승=빨강
+const cTop = hex('#26334a') // 상단(슬레이트 네이비)
+const cBot = hex('#0a0f1a') // 하단(딥 네이비)
+const grid = hex('#9fb3c8') // 옅은 그리드
+const red = hex('#ff4d4f') // 양봉(상승) — 한국 증시 빨강
+const blue = hex('#3b9dff') // 음봉(하락) — 파랑
 
 // 배경: 대각선 그라데이션 라운드 사각형
 fillRoundRect(0, 0, N, N, N * 0.235, (px, py) => {
-  const t = (px / N) * 0.45 + (py / N) * 0.55
+  const t = (px / N) * 0.4 + (py / N) * 0.6
   return [
     cTop[0] + (cBot[0] - cTop[0]) * t,
     cTop[1] + (cBot[1] - cTop[1]) * t,
@@ -115,52 +116,34 @@ fillRoundRect(0, 0, N, N, N * 0.235, (px, py) => {
   ]
 })
 
-// 은은한 막대(배경 텍스처) — 상승하는 바차트
-const bars = [0.66, 0.58, 0.62, 0.44, 0.3]
-const baseY = 0.82 * N
-const bw = 0.085 * N
-bars.forEach((topN, i) => {
-  const cx = (0.2 + i * 0.15) * N
-  const top = topN * N
-  fillRoundRect(cx - bw / 2, top, bw, baseY - top, bw * 0.28, () => white, 0.14)
-})
-
-// 상승 라인차트
-const pts = [
-  [0.15, 0.72],
-  [0.35, 0.55],
-  [0.52, 0.63],
-  [0.69, 0.35],
-  [0.86, 0.23],
-].map(([x, y]) => [x * N, y * N])
-
-const lw = 0.05 * N
-for (let i = 0; i < pts.length - 1; i++) {
-  drawSeg(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], lw / 2, white)
+// 옅은 가로 그리드 (차트 느낌)
+for (const gy of [0.34, 0.52, 0.7]) {
+  drawSeg(0.13 * N, gy * N, 0.87 * N, gy * N, 0.006 * N, grid, 0.16)
 }
-// 꼭짓점 점(마지막 화살표 자리는 제외)
-for (let i = 0; i < pts.length - 1; i++) drawDisc(pts[i][0], pts[i][1], lw * 0.62, white)
 
-// 화살표 머리(빨강) — 마지막 구간 방향
-{
-  const a = pts[pts.length - 2]
-  const tip = pts[pts.length - 1]
-  const dx = tip[0] - a[0]
-  const dy = tip[1] - a[1]
-  const len = Math.hypot(dx, dy)
-  const ux = dx / len
-  const uy = dy / len
-  const nx = -uy
-  const ny = ux
-  const size = 0.12 * N
-  const back = [tip[0] - ux * size, tip[1] - uy * size]
-  const w2 = size * 0.62
-  fillTriangle(
-    [tip[0] + ux * size * 0.25, tip[1] + uy * size * 0.25],
-    [back[0] + nx * w2, back[1] + ny * w2],
-    [back[0] - nx * w2, back[1] - ny * w2],
-    red,
-  )
+// 캔들스틱 — [centerX, openY, closeY, highY, lowY] (0..1, y는 아래로 증가)
+// 전체적으로 상승하는 흐름(양봉 우세)
+const candles = [
+  [0.22, 0.56, 0.64, 0.50, 0.69], // 음봉
+  [0.37, 0.62, 0.48, 0.43, 0.65], // 양봉
+  [0.5, 0.5, 0.57, 0.45, 0.62], // 음봉
+  [0.63, 0.55, 0.36, 0.31, 0.59], // 양봉
+  [0.78, 0.42, 0.21, 0.16, 0.46], // 양봉(강)
+]
+const bodyW = 0.11 * N
+const wickW = 0.026 * N
+for (const [cxN, oN, clN, hN, lN] of candles) {
+  const cx = cxN * N
+  const o = oN * N
+  const cl = clN * N
+  const up = cl < o // 종가가 위(작은 y)면 양봉
+  const col = up ? red : blue
+  // 심지(고가~저가)
+  drawSeg(cx, hN * N, cx, lN * N, wickW / 2, col)
+  // 몸통(시가~종가)
+  const top = Math.min(o, cl)
+  const bot = Math.max(o, cl)
+  fillRoundRect(cx - bodyW / 2, top, bodyW, Math.max(bot - top, bodyW * 0.34), bodyW * 0.16, () => col)
 }
 
 // ---- 면적 리샘플(프리멀티플라이드 → 스트레이트) ----
