@@ -29,8 +29,15 @@ npm test         # 단위 테스트 실행 (파서 · 라운드트립 매칭)
 ```bash
 npm run app:dev       # 개발용: Vite + Electron 동시 실행 (코드 수정 즉시 반영)
 npm run app:portable  # ★ 권장: release/TradeDiary-win/TradeDiary.exe 생성 (설치 불필요)
+npm run app:install   # 빌드 → C:\Program Files\TradeDiary 설치 + 바탕화면 바로가기 (UAC 승인 필요)
 npm run app:build     # 배포용 NSIS 설치 파일 생성 → release/TradeDiary Setup x.y.z.exe
 ```
+
+### C:\Program Files에 설치/업데이트 (`app:install`)
+빌드 후 `C:\Program Files\TradeDiary`로 복사하고 바탕화면에 "매매일지" 바로가기를 만듭니다.
+Program Files 쓰기에는 관리자 권한이 필요하므로 **실행 중 뜨는 UAC 창에서 "예"** 를 눌러야 합니다.
+(권한 작업은 별도 ASCII 스크립트 `scripts/copy-to-programfiles.ps1`로 분리해 승격하고, 한글 바로가기는
+`scripts/install.ps1`이 비승격 상태에서 생성합니다.) 코드 수정 후 다시 `npm run app:install` 하면 설치본이 갱신됩니다.
 
 ### 권장: 포터블 빌드 (`app:portable`)
 `release\TradeDiary-win\` 폴더가 만들어지고 그 안의 **`TradeDiary.exe`** 를 더블클릭하면 바로 실행됩니다.
