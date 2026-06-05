@@ -128,6 +128,13 @@ export function ImportPanel({ store }: { store: Store }) {
           </div>
         </div>
 
+        {parsed.length === 0 && text.includes('체결안내') && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            체결안내 메시지는 있는데 인식하지 못했어요. 한국투자증권 체결 알림(매매구분·종목명·체결수량·체결단가 포함)을
+            줄바꿈 그대로 붙여넣었는지 확인해 주세요. 메시지 일부가 잘리면 인식되지 않을 수 있습니다.
+          </div>
+        )}
+
         {parsed.length > 0 && (
           <div className="overflow-x-auto rounded-lg border border-gray-100">
             <table className="w-full min-w-[640px] text-xs">

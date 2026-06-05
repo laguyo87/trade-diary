@@ -95,6 +95,54 @@ describe('parseKakaoExecutions', () => {
     expect(parseKakaoExecutions('')).toEqual([])
   })
 
+  it('형식 B: 앱에서 복사한 "[보낸사람] [오전 H:MM]" 헤더 + 본문을 인식한다', () => {
+    const appCopy = `2025년 10월 24일
+[한국투자증권] [오전 10:41]
+[한국투자증권 체결안내]10:41
+*계좌번호:64****22-01
+*계좌명:김신회
+*매매구분:현금매수체결
+*종목명:삼성전자(005930)
+*체결수량:1주
+*체결단가:331,000원
+
+*주문수량:1주
+*총체결수량:1주
+*주문번호:49641000`
+    const res = parseKakaoExecutions(appCopy)
+    expect(res).toHaveLength(1)
+    const t = res[0].trade
+    expect(t.datetime).toBe('2025-10-24T10:41')
+    expect(t.side).toBe('buy')
+    expect(t.stockCode).toBe('005930')
+    expect(t.quantity).toBe(1)
+    expect(t.price).toBe(331000)
+  })
+
+  it('형식 C: 날짜 헤더 없는 단일 본문도 인식한다(시각은 마커, 날짜는 오늘)', () => {
+    const body = `[한국투자증권 체결안내]13:05
+*계좌번호:64****22-01
+*매매구분:현금매도체결
+*종목명:삼성전자(005930)
+*체결수량:2주
+*체결단가:332,500원`
+    const res = parseKakaoExecutions(body)
+    expect(res).toHaveLength(1)
+    const t = res[0].trade
+    expect(t.side).toBe('sell')
+    expect(t.quantity).toBe(2)
+    expect(t.price).toBe(332500)
+    // 시각은 마커(24시간)에서 추출, 날짜는 오늘로 보강
+    expect(t.datetime).toMatch(/^\d{4}-\d{2}-\d{2}T13:05$/)
+  })
+
+  it('모바일 내보내기의 점 표기 날짜(2025. 10. 24.)도 인식한다', () => {
+    const dotted = SAMPLE_BUY.replace('2025년 10월 24일', '2025. 10. 24.')
+    const res = parseKakaoExecutions(dotted)
+    expect(res).toHaveLength(1)
+    expect(res[0].trade.datetime).toBe('2025-10-24T10:41')
+  })
+
   it('tradeSignature는 핵심 필드로 구성된다', () => {
     const sig = tradeSignature({
       datetime: '2025-10-24T10:41',
