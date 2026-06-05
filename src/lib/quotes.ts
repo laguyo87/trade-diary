@@ -1,12 +1,20 @@
 import type { Quote } from '../types'
 
 // 현재가(시세) 조회.
-// 브라우저에서 네이버 금융을 직접 호출하면 CORS에 막히므로,
-// 개발 서버(vite.config.ts의 server.proxy)를 통해 우회한다.
-//   /naver-quote/{codes}  →  https://polling.finance.naver.com/api/realtime/domestic/stock/{codes}
+// 1) Electron 데스크톱 앱: 메인 프로세스(window.quoteApi)가 네이버를 직접
+//    호출하므로 CORS 제약이 없다.
+// 2) 웹 개발 서버: vite.config.ts의 server.proxy로 우회한다.
+//      /naver-quote/{codes} → https://polling.finance.naver.com/api/realtime/domestic/stock/{codes}
 // {codes}는 콤마로 묶어 여러 종목을 한 번에 조회한다(멀티-코드 엔드포인트).
-// 프록시가 없는 환경(npm run preview, 정적 배포)에서는 실패하며,
+// 둘 다 불가한 환경(npm run preview, 정적 배포)에서는 실패하며,
 // 이 경우 UI에서 수동 현재가 입력으로 폴백한다.
+
+declare global {
+  interface Window {
+    // Electron preload가 노출하는 시세 조회 브리지
+    quoteApi?: { fetch: (codes: string[]) => Promise<unknown> }
+  }
+}
 
 const ENDPOINT = '/naver-quote'
 
@@ -35,6 +43,27 @@ function parseDatum(data: Record<string, unknown>): Quote | null {
   }
 }
 
+/** 네이버 응답 JSON(datas) → {quotes, errors} (요청한 codes 기준 누락 판정) */
+function mapQuotes(
+  json: unknown,
+  codes: string[],
+): { quotes: Quote[]; errors: { code: string; message: string }[] } {
+  const datas = ((json as { datas?: unknown[] })?.datas ?? []) as Record<string, unknown>[]
+  const byCode = new Map<string, Quote>()
+  for (const d of datas) {
+    const q = parseDatum(d)
+    if (q) byCode.set(q.code, q)
+  }
+  const quotes: Quote[] = []
+  const errors: { code: string; message: string }[] = []
+  for (const code of codes) {
+    const q = byCode.get(code)
+    if (q) quotes.push(q)
+    else errors.push({ code, message: '해당 종목 시세를 찾을 수 없습니다.' })
+  }
+  return { quotes, errors }
+}
+
 /**
  * 여러 종목 현재가를 한 번의 요청으로 조회(멀티-코드).
  * 성공분만 quotes에 담고, 응답에 없거나 실패한 종목은 errors에 모은다.
@@ -42,14 +71,24 @@ function parseDatum(data: Record<string, unknown>): Quote | null {
 export async function fetchQuotes(
   codes: string[],
 ): Promise<{ quotes: Quote[]; errors: { code: string; message: string }[] }> {
-  const quotes: Quote[] = []
-  if (codes.length === 0) return { quotes, errors: [] }
+  if (codes.length === 0) return { quotes: [], errors: [] }
 
   const failAll = (message: string) => ({
-    quotes,
+    quotes: [] as Quote[],
     errors: codes.map((code) => ({ code, message })),
   })
 
+  // Electron: 메인 프로세스 브리지로 직접 조회 (CORS 없음)
+  if (typeof window !== 'undefined' && window.quoteApi) {
+    try {
+      const json = await window.quoteApi.fetch(codes)
+      return mapQuotes(json, codes)
+    } catch {
+      return failAll('시세 조회에 실패했습니다. 잠시 후 다시 시도하세요.')
+    }
+  }
+
+  // 웹: 개발 서버 프록시 경유
   let res: Response
   try {
     res = await fetch(`${ENDPOINT}/${codes.join(',')}`, {
@@ -57,7 +96,7 @@ export async function fetchQuotes(
     })
   } catch {
     return failAll(
-      '시세 서버에 연결할 수 없습니다. (자동 조회는 npm run dev 환경에서만 동작합니다)',
+      '시세 서버에 연결할 수 없습니다. (자동 조회는 데스크톱 앱 또는 npm run dev 에서 동작합니다)',
     )
   }
   if (!res.ok) return failAll(`시세 조회 실패 (HTTP ${res.status})`)
@@ -68,21 +107,7 @@ export async function fetchQuotes(
   } catch {
     return failAll('시세 응답을 해석할 수 없습니다.')
   }
-
-  const datas = ((json as { datas?: unknown[] })?.datas ?? []) as Record<string, unknown>[]
-  const byCode = new Map<string, Quote>()
-  for (const d of datas) {
-    const q = parseDatum(d)
-    if (q) byCode.set(q.code, q)
-  }
-
-  const errors: { code: string; message: string }[] = []
-  for (const code of codes) {
-    const q = byCode.get(code)
-    if (q) quotes.push(q)
-    else errors.push({ code, message: '해당 종목 시세를 찾을 수 없습니다.' })
-  }
-  return { quotes, errors }
+  return mapQuotes(json, codes)
 }
 
 /** 단일 종목 현재가 조회. 실패 시 QuoteFetchError throw. */

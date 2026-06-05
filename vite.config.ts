@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Electron에서 file://로 로드되므로 상대 경로 사용
+  base: './',
   plugins: [react()],
   server: {
     // 보유 종목 현재가 자동 조회용 프록시 (CORS 우회).

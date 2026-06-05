@@ -6,6 +6,9 @@ dist/
 dist-ssr/
 *.tsbuildinfo
 
+# electron 패키징 산출물
+release/
+
 # 개인정보 보호 — 카카오톡 원본 / 내 거래 데이터는 절대 커밋 금지
 data/
 *.kakao.txt
