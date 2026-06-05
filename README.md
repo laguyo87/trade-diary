@@ -64,15 +64,21 @@ Windows에서 추출하려면 **심볼릭 링크 생성 권한**이 필요합니
 이 앱은 **설치형 PWA**라 폰 홈 화면에 앱처럼 설치할 수 있습니다(오프라인 동작, 별도 빌드 도구 불필요).
 설치(서비스워커)에는 **HTTPS**가 필요하므로 정적 호스팅에 올린 뒤 폰에서 여는 방식이 가장 쉽습니다.
 
-### 1) HTTPS에 올려서 설치 (권장)
-```bash
-npm run build      # dist/ 생성 (개인정보 없음 — 거래 데이터는 기기 localStorage에만 저장)
-```
-- **Netlify Drop**: https://app.netlify.com/drop 에 `dist` 폴더를 드래그 → 즉시 HTTPS 주소 발급
-- 또는 Vercel / Cloudflare Pages / GitHub Pages 등 아무 정적 호스팅
-- 폰 크롬에서 그 주소 접속 → 메뉴 **⋮ → 홈 화면에 추가/앱 설치** → 캔들 아이콘으로 설치됨
+### 1) 배포된 주소에서 설치 (이미 설정됨 · 권장)
+**라이브 주소: https://laguyo87.github.io/trade-diary/** (GitHub Pages, HTTPS)
 
-> `base: './'` 라 서브경로 호스팅(GitHub Pages 프로젝트 페이지 등)에서도 그대로 동작합니다.
+폰 크롬에서 위 주소 접속 → 메뉴 **⋮ → 앱 설치 / 홈 화면에 추가** → 캔들 아이콘으로 설치됩니다.
+
+코드를 고친 뒤 다시 배포하려면:
+```bash
+npm run deploy     # 빌드 후 gh-pages 브랜치로 게시 (1~2분 뒤 위 주소에 반영)
+```
+- GitHub Pages 소스 = `gh-pages` 브랜치(루트). 소스 코드는 `main` 브랜치.
+- 저장소: https://github.com/laguyo87/trade-diary (Public, 소스만 — 거래 데이터·카톡 원본은 `.gitignore` 제외)
+- `base: './'` 라 서브경로(`/trade-diary/`)에서도 그대로 동작합니다.
+
+> 다른 호스팅을 쓰려면 `npm run build` 후 `dist/`를 Netlify Drop(https://app.netlify.com/drop)
+> 등에 올려도 됩니다.
 
 ### 2) 같은 와이파이에서 빠르게 테스트 (설치는 제한)
 ```bash
