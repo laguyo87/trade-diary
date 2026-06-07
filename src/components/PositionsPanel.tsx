@@ -46,6 +46,8 @@ export function PositionsPanel({ store }: { store: Store }) {
 
   // 동시 요청 방지용 ref (state 클로저 문제 회피)
   const fetchingRef = useRef(false)
+  // 마운트 시 1회 자동 조회 가드
+  const initedRef = useRef(false)
 
   const refreshAll = async () => {
     if (fetchingRef.current) return
@@ -104,11 +106,26 @@ export function PositionsPanel({ store }: { store: Store }) {
     return () => window.clearInterval(id)
   }, [])
 
+  // 대시보드를 열 때, 보유 종목은 있는데 현재가/지수 데이터가 없으면 자동으로 1회 조회.
+  // (현재가·지수 캐시가 이미 있으면 불필요한 요청을 보내지 않음)
+  useEffect(() => {
+    if (initedRef.current || store.openPositions.length === 0) return
+    const missingQuote = store.openPositions.some((p) => !store.quotes[p.stockCode])
+    const missingIndex = Object.keys(store.indexCache).length === 0
+    if (!missingQuote && !missingIndex) return
+    initedRef.current = true
+    void refreshAll()
+    // refreshAll은 매 렌더 새로 생성되므로 의존성에서 제외 (의도적)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.openPositions.length])
+
   const refreshOne = async (code: string) => {
     setLoading(true)
     const { quotes, errors } = await fetchQuotes([code])
     store.setQuotes(quotes)
     setErrors((prev) => [...prev.filter((e) => e.code !== code), ...errors])
+    // 개별 조회에서도 지수(지수 대비 손절 기준)를 함께 받아온다
+    await refreshIndexes(quotes)
     setLoading(false)
   }
 
