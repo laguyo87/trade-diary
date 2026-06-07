@@ -73,21 +73,23 @@ describe('parseKakaoExecutions', () => {
     expect(res.map((r) => r.trade.side).sort()).toEqual(['buy', 'sell'])
   })
 
-  it('동일 체결 중복 붙여넣기는 한 건으로만 처리한다', () => {
+  it('같은 분·수량·단가의 분할체결은 각각 보존하고 서로 다른 id를 부여한다', () => {
+    // 같은 텍스트에 동일 체결이 2번(분할체결) → 2건 보존, id 다름
     const blob = [SAMPLE_BUY, SAMPLE_BUY].join('\n\n')
     const res = parseKakaoExecutions(blob)
-    expect(res).toHaveLength(1)
+    expect(res).toHaveLength(2)
+    // 시그니처는 같지만 발생 순번이 달라 id가 서로 다르다
+    expect(res[0].trade.id).not.toBe(res[1].trade.id)
+    // 두 건의 핵심 값(수량·단가·시각)은 동일
+    expect(res[0].trade.quantity).toBe(res[1].trade.quantity)
+    expect(res[0].trade.datetime).toBe(res[1].trade.datetime)
   })
 
-  it('같은 체결은 항상 동일한 결정적 id를 생성한다(재import 멱등성)', () => {
-    const a = parseKakaoExecutions(SAMPLE_BUY)[0].trade
-    const b = parseKakaoExecutions(SAMPLE_BUY)[0].trade
-    expect(a.id).toBe(b.id)
-    expect(a.id).toBe(
-      'k' +
-        // 시그니처가 같으면 id도 같다 — 값 자체보다 동일성이 핵심
-        a.id.slice(1),
-    )
+  it('같은 텍스트를 다시 파싱하면 동일한 id 집합을 생성한다(재import 멱등성)', () => {
+    const blob = [SAMPLE_BUY, SAMPLE_BUY, SAMPLE_SELL].join('\n\n')
+    const a = parseKakaoExecutions(blob).map((r) => r.trade.id)
+    const b = parseKakaoExecutions(blob).map((r) => r.trade.id)
+    expect(a).toEqual(b)
   })
 
   it('체결안내가 전혀 없으면 빈 배열', () => {

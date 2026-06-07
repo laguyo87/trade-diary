@@ -1,5 +1,4 @@
 import type { StoreSnapshot, Trade } from '../types'
-import { tradeSignature } from './kakaoParser'
 
 const KEY = 'trade-diary:v1'
 const VERSION = 1
@@ -47,23 +46,27 @@ export function saveSnapshot(s: StoreSnapshot): void {
   }
 }
 
-/** 시그니처 기준 중복 제거하며 trades 병합. 기존 우선 유지. */
+/**
+ * ID 기준 중복 제거하며 trades 병합. 기존 우선 유지.
+ * 카카오 파서의 ID는 (시그니처 + 발생순번)으로 결정적이라, 같은 텍스트를
+ * 다시 가져와도 동일 ID가 되어 중복되지 않고, 같은 분의 분할체결은
+ * 서로 다른 ID(순번)라 각각 보존된다. 수동 입력은 UUID라 항상 별건이다.
+ */
 export function mergeTrades(existing: Trade[], incoming: Trade[]): {
   merged: Trade[]
   added: number
   skipped: number
 } {
-  const sigs = new Set(existing.map((t) => tradeSignature(t)))
+  const ids = new Set(existing.map((t) => t.id))
   let added = 0
   let skipped = 0
   const merged = [...existing]
   for (const t of incoming) {
-    const sig = tradeSignature(t)
-    if (sigs.has(sig)) {
+    if (ids.has(t.id)) {
       skipped++
       continue
     }
-    sigs.add(sig)
+    ids.add(t.id)
     merged.push(t)
     added++
   }

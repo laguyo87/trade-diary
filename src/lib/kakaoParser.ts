@@ -156,7 +156,10 @@ export function parseKakaoExecutions(text: string): ParsedExecution[] {
   }
 
   const out: ParsedExecution[] = []
-  const seen = new Set<string>()
+  // 같은 시그니처(시각·종목·구분·수량·단가·계좌)가 한 텍스트에 여러 번 나오면
+  // 분할체결로 보고 각각 보존한다. 단 ID에 발생 순번을 넣어, 같은 텍스트를
+  // 다시 붙여넣어도 동일 ID가 생성되어 중복 저장되지 않도록(멱등) 한다.
+  const seqBySig = new Map<string, number>()
 
   for (let a = 0; a < anchors.length; a++) {
     const start = anchors[a]
@@ -188,12 +191,14 @@ export function parseKakaoExecutions(text: string): ParsedExecution[] {
       price,
       account,
     })
-    if (seen.has(sig)) continue
-    seen.add(sig)
+    // 발생 순번: 첫 번째는 hash(sig)로(기존 ID와 호환), 두 번째부터 sig#n
+    const seq = seqBySig.get(sig) ?? 0
+    seqBySig.set(sig, seq + 1)
+    const id = seq === 0 ? hashId(sig) : hashId(`${sig}#${seq}`)
 
     out.push({
       trade: {
-        id: hashId(sig),
+        id,
         datetime,
         stockName: stock.name,
         stockCode: stock.code,
