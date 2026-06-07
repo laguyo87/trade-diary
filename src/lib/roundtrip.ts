@@ -9,7 +9,6 @@ interface Lot {
   tradeId: string
   qty: number // 남은 수량
   price: number
-  datetime: string // 매수 시각
 }
 
 function groupKey(t: Trade): string {
@@ -39,7 +38,6 @@ export function matchRoundTrips(trades: Trade[]): MatchResult {
   }
 
   const roundTrips: RoundTrip[] = []
-  const openPositions: OpenPosition[] = []
 
   for (const [, groupTrades] of groups) {
     const sorted = sortTrades(groupTrades)
@@ -47,7 +45,7 @@ export function matchRoundTrips(trades: Trade[]): MatchResult {
 
     for (const t of sorted) {
       if (t.side === 'buy') {
-        lots.push({ tradeId: t.id, qty: t.quantity, price: t.price, datetime: t.datetime })
+        lots.push({ tradeId: t.id, qty: t.quantity, price: t.price })
         continue
       }
 
@@ -102,28 +100,71 @@ export function matchRoundTrips(trades: Trade[]): MatchResult {
       })
     }
 
-    // 남은 매수 lot = 미청산 포지션 (종목별 합산)
-    const open = lots.filter((l) => l.qty > 0)
-    if (open.length > 0) {
-      const sample = sorted.find((s) => s.side === 'buy')!
-      const totalQty = open.reduce((s, l) => s + l.qty, 0)
-      const cost = open.reduce((s, l) => s + l.qty * l.price, 0)
-      // FIFO 순서라 남은 lot 중 첫 번째가 가장 오래된 진입
-      const openDate = open.reduce((min, l) => (l.datetime < min ? l.datetime : min), open[0].datetime)
-      openPositions.push({
-        key: groupKey(sample),
-        stockCode: sample.stockCode,
-        stockName: sample.stockName,
-        account: sample.account,
-        quantity: totalQty,
-        avgBuyPrice: cost / totalQty,
-        cost,
-        openDate,
-      })
-    }
   }
+
+  // 미청산 포지션은 증권사식 이동평균(평균매입단가)으로 별도 계산
+  const openPositions = computeOpenPositions(trades)
 
   // 최신 청산이 위로 오도록 정렬
   roundTrips.sort((a, b) => (a.closeDate < b.closeDate ? 1 : -1))
   return { roundTrips, openPositions }
+}
+
+/**
+ * 미청산(보유) 포지션 — 증권사와 동일한 이동평균(평균매입단가) 방식.
+ * - 매수: 평단 = (기존수량*기존평단 + 매수수량*매수가) / 총수량
+ * - 매도: 수량만 차감(평단 불변). 수량이 0이 되면 평단·진입일 초기화.
+ * - 진입일(openDate): 보유가 0에서 다시 양수가 되는 시점(현재 보유의 시작).
+ * 같은 (계좌, 종목)끼리 집계한다.
+ */
+export function computeOpenPositions(trades: Trade[]): OpenPosition[] {
+  const groups = new Map<string, Trade[]>()
+  for (const t of trades) {
+    const k = groupKey(t)
+    if (!groups.has(k)) groups.set(k, [])
+    groups.get(k)!.push(t)
+  }
+
+  const out: OpenPosition[] = []
+  for (const [key, groupTrades] of groups) {
+    const sorted = sortTrades(groupTrades)
+    const head = groupTrades[0]
+    let qty = 0
+    let avg = 0
+    let openDate = ''
+
+    for (const t of sorted) {
+      if (t.side === 'buy') {
+        if (qty <= 0) {
+          qty = t.quantity
+          avg = t.price
+          openDate = t.datetime
+        } else {
+          avg = (qty * avg + t.quantity * t.price) / (qty + t.quantity)
+          qty += t.quantity
+        }
+      } else {
+        qty -= t.quantity
+        if (qty <= 0) {
+          qty = 0
+          avg = 0
+          openDate = ''
+        }
+      }
+    }
+
+    if (qty > 0) {
+      out.push({
+        key,
+        stockCode: head.stockCode,
+        stockName: head.stockName,
+        account: head.account,
+        quantity: qty,
+        avgBuyPrice: avg,
+        cost: qty * avg,
+        openDate,
+      })
+    }
+  }
+  return out
 }

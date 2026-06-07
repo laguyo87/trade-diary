@@ -51,11 +51,36 @@ describe('matchRoundTrips (FIFO)', () => {
     // 10@1000 + 5@2000 = 20000, avg = 1333.33
     expect(r.buyAmount).toBe(20000)
     expect(r.avgBuyPrice).toBeCloseTo(1333.33, 1)
-    expect(r.pnl).toBe(15 * 2500 - 20000) // 37500 - 20000 = 17500
-    // 미청산 5주 @2000
+    expect(r.pnl).toBe(15 * 2500 - 20000) // 37500 - 20000 = 17500 (실현은 FIFO)
+    // 미청산 5주 — 보유 평단은 증권사식 이동평균: (10*1000+10*2000)/20 = 1500
     expect(openPositions).toHaveLength(1)
     expect(openPositions[0].quantity).toBe(5)
-    expect(openPositions[0].avgBuyPrice).toBe(2000)
+    expect(openPositions[0].avgBuyPrice).toBe(1500)
+    expect(openPositions[0].cost).toBe(5 * 1500)
+  })
+
+  it('보유 평단은 이동평균 — 부분매도해도 평단이 바뀌지 않는다(증권사 방식)', () => {
+    const trades = [
+      mk({ side: 'buy', quantity: 10, price: 1000, datetime: '2025-01-01T09:00' }),
+      mk({ side: 'buy', quantity: 30, price: 2000, datetime: '2025-01-02T09:00' }),
+      mk({ side: 'sell', quantity: 20, price: 3000, datetime: '2025-01-03T09:00' }),
+    ]
+    const { openPositions } = matchRoundTrips(trades)
+    // 매수 후 평단 = (10*1000+30*2000)/40 = 1750, 매도 20 → 잔량 20, 평단 1750 유지
+    expect(openPositions[0].quantity).toBe(20)
+    expect(openPositions[0].avgBuyPrice).toBe(1750)
+  })
+
+  it('전량 매도 후 재매수하면 진입일(openDate)이 재매수 시점으로 갱신된다', () => {
+    const trades = [
+      mk({ side: 'buy', quantity: 10, price: 1000, datetime: '2025-01-01T09:00' }),
+      mk({ side: 'sell', quantity: 10, price: 1100, datetime: '2025-01-05T09:00' }),
+      mk({ side: 'buy', quantity: 5, price: 1200, datetime: '2025-03-10T09:00' }),
+    ]
+    const { openPositions } = matchRoundTrips(trades)
+    expect(openPositions[0].quantity).toBe(5)
+    expect(openPositions[0].avgBuyPrice).toBe(1200)
+    expect(openPositions[0].openDate).toBe('2025-03-10T09:00')
   })
 
   it('부분 매도 후 보유 잔량을 미청산으로 남긴다', () => {
