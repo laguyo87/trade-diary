@@ -17,6 +17,13 @@ export default defineConfig({
         rewrite: (path) =>
           path.replace(/^\/naver-quote/, '/api/realtime/domestic/stock'),
       },
+      // 시장지수 일별 종가(siseJson) — 지수 대비 손절 기준용
+      '/naver-index': {
+        target: 'https://api.finance.naver.com',
+        changeOrigin: true,
+        headers: { Referer: 'https://finance.naver.com/' },
+        rewrite: (path) => path.replace(/^\/naver-index/, '/siseJson.naver'),
+      },
     },
   },
   test: {

@@ -4,4 +4,5 @@ const { contextBridge, ipcRenderer } = require('electron')
 // window.quoteApi.fetch(codes) → 네이버 시세 JSON
 contextBridge.exposeInMainWorld('quoteApi', {
   fetch: (codes) => ipcRenderer.invoke('quotes:fetch', codes),
+  indexDaily: (symbol, start, end) => ipcRenderer.invoke('index:fetch', symbol, start, end),
 })

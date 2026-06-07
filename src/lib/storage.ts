@@ -15,6 +15,7 @@ export function emptySnapshot(): StoreSnapshot {
     journals: {},
     customStrategies: [],
     quotes: {},
+    indexCache: {},
     settings: { ...DEFAULT_SETTINGS },
   }
 }
@@ -30,6 +31,7 @@ export function loadSnapshot(): StoreSnapshot {
       journals: parsed.journals ?? {},
       customStrategies: parsed.customStrategies ?? [],
       quotes: parsed.quotes ?? {},
+      indexCache: parsed.indexCache ?? {},
       settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
     }
   } catch {
@@ -82,6 +84,7 @@ export function importJson(text: string): StoreSnapshot {
     journals: parsed.journals ?? {},
     customStrategies: parsed.customStrategies ?? [],
     quotes: parsed.quotes ?? {},
+    indexCache: parsed.indexCache ?? {},
     settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
   }
 }

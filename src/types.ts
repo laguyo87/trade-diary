@@ -46,6 +46,7 @@ export interface OpenPosition {
   quantity: number
   avgBuyPrice: number
   cost: number // 보유 원금
+  openDate: string // 미청산 잔량의 최초 매수 시각(진입일) — 지수 대비 손절 기준용
 }
 
 // 현재가(시세) — 보유 종목 평가손익 계산용
@@ -55,6 +56,7 @@ export interface Quote {
   name?: string
   changeRate?: number // 등락률 %
   marketStatus?: string // OPEN / CLOSE 등
+  market?: string // 'KOSPI' | 'KOSDAQ' | 'KONEX' (지수 대비 손절 기준용)
   updatedAt: string // ISO
   manual?: boolean // 수동 입력 여부
 }
@@ -85,5 +87,7 @@ export interface StoreSnapshot {
   journals: Record<string, JournalEntry>
   customStrategies: string[]
   quotes: Record<string, Quote> // 종목코드 → 현재가
+  // 시장지수 일별 종가 캐시: market(KOSPI/KOSDAQ) → { 'YYYYMMDD': 종가 }
+  indexCache: Record<string, Record<string, number>>
   settings: Settings
 }

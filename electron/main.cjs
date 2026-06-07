@@ -51,6 +51,23 @@ ipcMain.handle('quotes:fetch', async (_event, codes) => {
   return await res.json()
 })
 
+// ---- 시장지수 일별(종가) 조회 — 지수 대비 손절 기준용 ----
+ipcMain.handle('index:fetch', async (_event, symbol, start, end) => {
+  const url =
+    'https://api.finance.naver.com/siseJson.naver?symbol=' +
+    encodeURIComponent(symbol) +
+    '&requestType=1&startTime=' +
+    start +
+    '&endTime=' +
+    end +
+    '&timeframe=day'
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://finance.naver.com/' },
+  })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  return await res.text()
+})
+
 app.whenReady().then(() => {
   createWindow()
   app.on('activate', () => {

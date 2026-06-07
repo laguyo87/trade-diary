@@ -16,7 +16,7 @@ export function useStore() {
     saveSnapshot(snapshot)
   }, [snapshot])
 
-  const { trades, journals, customStrategies, quotes, settings } = snapshot
+  const { trades, journals, customStrategies, quotes, indexCache, settings } = snapshot
 
   const addTrade = useCallback((t: Trade) => {
     setSnapshot((s) => {
@@ -62,6 +62,7 @@ export function useStore() {
       journals: {},
       customStrategies: [],
       quotes: {},
+      indexCache: {},
       settings: s.settings, // 설정(자동갱신/초기원금)은 유지
     }))
   }, [])
@@ -83,6 +84,18 @@ export function useStore() {
       return { ...s, quotes: next }
     })
   }, [])
+
+  /** 시장지수 일별 종가 시리즈를 캐시에 병합 */
+  const mergeIndexSeries = useCallback(
+    (market: string, series: Record<string, number>) => {
+      if (!market || Object.keys(series).length === 0) return
+      setSnapshot((s) => ({
+        ...s,
+        indexCache: { ...s.indexCache, [market]: { ...s.indexCache[market], ...series } },
+      }))
+    },
+    [],
+  )
 
   const saveJournal = useCallback((entry: JournalEntry) => {
     setSnapshot((s) => ({
@@ -119,6 +132,7 @@ export function useStore() {
     journals,
     customStrategies,
     quotes,
+    indexCache,
     settings,
     allStrategies,
     roundTrips,
@@ -132,6 +146,7 @@ export function useStore() {
     addStrategy,
     setQuote,
     setQuotes,
+    mergeIndexSeries,
     updateSettings,
     replaceSnapshot,
   }

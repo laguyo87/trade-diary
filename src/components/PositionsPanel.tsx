@@ -3,6 +3,7 @@ import type { Store } from '../hooks/useStore'
 import type { Quote } from '../types'
 import { portfolioValue, valuePositions } from '../lib/stats'
 import { fetchQuotes } from '../lib/quotes'
+import { computeRelativeStop, fetchIndexSeries, toYmd } from '../lib/indexQuotes'
 import { isKoreanMarketOpen, marketSessionLabel } from '../lib/market'
 import {
   formatNumber,
@@ -55,8 +56,33 @@ export function PositionsPanel({ store }: { store: Store }) {
     const { quotes, errors } = await fetchQuotes(codes)
     store.setQuotes(quotes)
     setErrors(errors)
+    // 지수 대비 손절 기준용: 보유 시장별 지수 일별 종가 확보
+    await refreshIndexes(quotes)
     setLoading(false)
     fetchingRef.current = false
+  }
+
+  /** 보유 종목 시장(KOSPI/KOSDAQ)별 지수 일별 종가를 가장 이른 진입일~오늘 범위로 받아 캐시 병합 */
+  const refreshIndexes = async (latestQuotes: Quote[]) => {
+    const byCode = new Map(latestQuotes.map((q) => [q.code, q]))
+    const earliest = new Map<string, string>() // market → 가장 이른 진입 ymd
+    for (const p of store.openPositions) {
+      const mkt = byCode.get(p.stockCode)?.market ?? store.quotes[p.stockCode]?.market
+      if (mkt !== 'KOSPI' && mkt !== 'KOSDAQ') continue
+      const ymd = toYmd(p.openDate)
+      const cur = earliest.get(mkt)
+      if (!cur || ymd < cur) earliest.set(mkt, ymd)
+    }
+    if (earliest.size === 0) return
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const end = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+    await Promise.all(
+      [...earliest.entries()].map(async ([mkt, start]) => {
+        const series = await fetchIndexSeries(mkt, start, end)
+        store.mergeIndexSeries(mkt, series)
+      }),
+    )
   }
 
   // 장중 자동 갱신: 켜져 있고 보유 종목이 있으며 정규장일 때만 주기적으로 조회.
@@ -198,7 +224,7 @@ export function PositionsPanel({ store }: { store: Store }) {
       )}
 
       <div className="overflow-x-auto">
-        <table className="mt-1 w-full min-w-[720px] text-sm">
+        <table className="mt-1 w-full min-w-[940px] text-sm">
           <thead>
             <tr className="border-y border-gray-100 text-left text-xs text-gray-500">
               <th className="px-4 py-2 font-medium">종목</th>
@@ -208,6 +234,10 @@ export function PositionsPanel({ store }: { store: Store }) {
               <th className="px-4 py-2 text-right font-medium">평가금액</th>
               <th className="px-4 py-2 text-right font-medium">평가손익</th>
               <th className="px-4 py-2 text-right font-medium">수익률</th>
+              <th className="px-4 py-2 text-right font-medium">
+                지수 대비
+                <span className="block text-[10px] font-normal text-gray-400">-10% 손절 기준</span>
+              </th>
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
@@ -215,6 +245,12 @@ export function PositionsPanel({ store }: { store: Store }) {
             {valued.map((p) => {
               const draft = drafts[p.stockCode]
               const showVal = p.unrealizedPnl != null
+              const rel = computeRelativeStop({
+                market: store.quotes[p.stockCode]?.market,
+                entryDate: p.openDate,
+                stockReturnPct: p.unrealizedPct,
+                indexCache: store.indexCache,
+              })
               return (
                 <tr key={p.key} className="border-b border-gray-50">
                   <td className="px-4 py-2">
@@ -259,6 +295,35 @@ export function PositionsPanel({ store }: { store: Store }) {
                     {showVal ? formatPct(p.unrealizedPct!) : '-'}
                   </td>
                   <td className="px-4 py-2 text-right">
+                    {rel == null ? (
+                      <span className="text-xs text-gray-300" title="현재가·지수 데이터가 필요합니다 ('전체 현재가 불러오기')">
+                        -
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex flex-col items-end"
+                        title={`종목 ${formatPct(rel.stockReturnPct)} − 지수 ${formatPct(
+                          rel.indexReturnPct,
+                        )} = ${formatPct(rel.relativePct)}\n${rel.market} 진입 ${rel.entryYmd} 종가 ${formatNumber(
+                          rel.entryIndex,
+                        )} → 현재 ${rel.currentYmd} 종가 ${formatNumber(rel.currentIndex)}`}
+                      >
+                        {rel.reached ? (
+                          <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-700">
+                            손절 {formatPct(rel.relativePct)}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium tabular-nums text-gray-700">
+                            {formatPct(rel.relativePct)}
+                          </span>
+                        )}
+                        <span className="mt-0.5 text-[10px] text-gray-400 tabular-nums">
+                          종목{formatPct(rel.stockReturnPct)} / 지수{formatPct(rel.indexReturnPct)}
+                        </span>
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right">
                     <button
                       className="text-xs text-gray-400 hover:text-gray-700"
                       onClick={() => refreshOne(p.stockCode)}
@@ -274,8 +339,10 @@ export function PositionsPanel({ store }: { store: Store }) {
         </table>
       </div>
 
-      <div className="px-4 py-2 text-[11px] text-gray-400">
-        현재가 자동 조회는 개발 서버(npm run dev)에서만 동작합니다. 그 외 환경에서는 현재가 칸에 직접 입력하세요.
+      <div className="px-4 py-2 text-[11px] leading-relaxed text-gray-400">
+        · 자동 조회(현재가·지수)는 데스크톱 앱 또는 개발 서버(npm run dev)에서 동작합니다. 그 외 환경에서는 현재가를 직접 입력하세요.
+        <br />· <b>지수 대비 -10% 손절</b>: 진입(매수)일 이후 <b>누적</b>으로 <b>(종목 수익률 − 시장지수 수익률)</b>이 -10% 이하면 손절 신호입니다.
+        종가 기준이며, 코스피/코스닥 종목만 산출됩니다. (마우스를 올리면 상세 계산이 보입니다)
       </div>
     </div>
   )

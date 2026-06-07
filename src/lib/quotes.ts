@@ -12,7 +12,11 @@ import type { Quote } from '../types'
 declare global {
   interface Window {
     // Electron preload가 노출하는 시세 조회 브리지
-    quoteApi?: { fetch: (codes: string[]) => Promise<unknown> }
+    quoteApi?: {
+      fetch: (codes: string[]) => Promise<unknown>
+      // 시장지수 일별(종가) 원본 텍스트 (siseJson)
+      indexDaily?: (symbol: string, start: string, end: string) => Promise<string>
+    }
   }
 }
 
@@ -32,12 +36,15 @@ function parseDatum(data: Record<string, unknown>): Quote | null {
   const price = toNumber(data.closePrice)
   if (!code || !isFinite(price) || price <= 0) return null
   const changeRate = toNumber(data.fluctuationsRatio)
+  const ex = data.stockExchangeType as { name?: unknown } | undefined
+  const market = ex && typeof ex.name === 'string' ? ex.name : undefined
   return {
     code,
     price,
     name: typeof data.stockName === 'string' ? data.stockName : undefined,
     changeRate: isFinite(changeRate) ? changeRate : undefined,
     marketStatus: typeof data.marketStatus === 'string' ? data.marketStatus : undefined,
+    market,
     updatedAt: new Date().toISOString(),
     manual: false,
   }

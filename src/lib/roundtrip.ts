@@ -9,6 +9,7 @@ interface Lot {
   tradeId: string
   qty: number // 남은 수량
   price: number
+  datetime: string // 매수 시각
 }
 
 function groupKey(t: Trade): string {
@@ -46,7 +47,7 @@ export function matchRoundTrips(trades: Trade[]): MatchResult {
 
     for (const t of sorted) {
       if (t.side === 'buy') {
-        lots.push({ tradeId: t.id, qty: t.quantity, price: t.price })
+        lots.push({ tradeId: t.id, qty: t.quantity, price: t.price, datetime: t.datetime })
         continue
       }
 
@@ -107,6 +108,8 @@ export function matchRoundTrips(trades: Trade[]): MatchResult {
       const sample = sorted.find((s) => s.side === 'buy')!
       const totalQty = open.reduce((s, l) => s + l.qty, 0)
       const cost = open.reduce((s, l) => s + l.qty * l.price, 0)
+      // FIFO 순서라 남은 lot 중 첫 번째가 가장 오래된 진입
+      const openDate = open.reduce((min, l) => (l.datetime < min ? l.datetime : min), open[0].datetime)
       openPositions.push({
         key: groupKey(sample),
         stockCode: sample.stockCode,
@@ -115,6 +118,7 @@ export function matchRoundTrips(trades: Trade[]): MatchResult {
         quantity: totalQty,
         avgBuyPrice: cost / totalQty,
         cost,
+        openDate,
       })
     }
   }
